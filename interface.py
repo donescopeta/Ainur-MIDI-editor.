@@ -265,6 +265,65 @@ class roll:
         n = self.getGridCell(x - self.rollLeft, y - self.rollTop)
         self.noteCreate(*n)
         self.updateNotes(self.notesSurface[0])
+
+    def noteStreach(self,note,mag):
+        g = 0
+        start, key, ran = note
+        x, y = mag
+        x -= self.rollLeft
+        y -= self.rollTop
+
+        # additional sensivity
+        x +=5
+
+        g = sorted([ ( abs(g[0] - x) , g ) for g in self.Grid ], key = lambda x: x[0])
+        
+        r = g[0][1][1]
+
+        print(r)
+
+        if r < start:
+            d = start - r
+            start -= d
+            ran += d
+        elif r > start + ran:
+            d = r -  (start + ran)
+            ran += d
+        else:
+            rangeA = abs( r - start )
+            rangeB = abs( r - (ran + start) )
+            if rangeB < rangeA:
+                 ran -= rangeB
+            elif rangeA < rangeB:
+                ran -= rangeA
+                start += rangeA
+            else: return note
+  
+        self.noteBuffer.discard(note)
+        note = (start, key, ran)
+        
+        self.noteBuffer.add(note)
+
+        return note
+
+    def gripnote(self,p):
+        x, y = p
+        x -= self.rollLeft
+        y -= self.rollTop
+
+        print(y)
+        for k in self.noteZones: 
+            if \
+                y > k[2] and \
+                y < k[3] and ( \
+                    abs(k[0] - x) < 5 or \
+                    abs(k[1] - x) < 5 \
+                ):
+                
+                print("found")
+                return k[4]
+
+        return None
 #import some useful constants
 
 class threadedWorker:
@@ -336,6 +395,7 @@ note=False
 yStretcher = clickableRect(0,r.rollTop,r.rollLeft,r.rollHeight)
 xStretcher = clickableRect(r.rollLeft,0,r.rollWidth,20)
 rollclick = clickableRect(r.rollLeft,r.rollTop,r.rollWidth,r.rollHeight)
+strechingNote = None
 
 while True:
     #get all the user events
@@ -350,8 +410,14 @@ while True:
     for event in pygame.event.get():
         if event.type == MOUSEBUTTONDOWN:
             position = pygame.mouse.get_pos()
-            ## Double click
-            if rollclick(position):
+            ## Double click 
+            f = r.gripnote(position)
+            if f:
+                strechingNote = f
+                print("streaching")
+                noteDrawer = threadedWorker(r.notesSurface,25,func=r.updateNotes)
+
+            elif rollclick(position):
                 if clickTime:
                     clickTime = 0
                     if note:
@@ -377,7 +443,6 @@ while True:
                 lastpos = pygame.mouse.get_pos()
                 #print "start"
                 pygame.mouse.set_visible(0)
-
             continue
 
         elif event.type == MOUSEBUTTONUP:
@@ -391,7 +456,9 @@ while True:
                 gridDrawer.stop()
                 noteDrawer.stop()
                 pygame.mouse.set_visible(1)
-
+            elif strechingNote:
+                noteDrawer.stop()
+                strechingNote = None
             continue
 
         elif event.type == MOUSEMOTION:
@@ -408,14 +475,10 @@ while True:
                     vector = (p[0] - lastpos[0],p[1] - lastpos[1])
                     r.parseMouseVectorX(*vector)
                     pygame.mouse.set_pos(lastpos)
+                elif strechingNote:
+                    print("performing streaching")
+                    strechingNote = r.noteStreach( strechingNote, p )
                 elif note and ( note != r.getNote(p) ):
-                    x1,x2 = filter(lambda x : x[4] == note, self.noteZones)[:2]
-                    mini = min(p [0] - x1, x2 -p[0] )
-                    if ( mini > 0 and mini < 5 ):
-                        r.noteBuffer.discard(note)
-                        
-                    ##resizifng bote in that place.
-
                     r.noteBuffer.discard(note)
                     g = r.getGridCell(p[0] - r.rollLeft, p[1] - r.rollTop)
                     note =  ( g[1], int(g[0]) ) + note[2:]
